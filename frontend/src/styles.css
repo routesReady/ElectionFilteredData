@@ -1,0 +1,154 @@
+/* ---------------------------
+  Theme: Light Blue / Soft Grey
+  + Dark Mode toggle support
+  Includes:
+  - sticky filter bar
+  - input icons
+  - loader
+  - row selection highlight
+---------------------------- */
+
+/* ---------- VARIABLES ---------- */
+:root{
+  --bg: linear-gradient(180deg,#ffffff,#ffffff);
+  --card: #ffffff;
+  --muted: #6b7280;
+  --text: #0f172a;
+  --primary: #2563eb;
+  --primary-dark: #1d4ed8;
+  --accent: #06b6d4;
+  --border: rgba(15,23,42,0.06);
+  --table-head: #0f172a;
+  --table-head-text: #ffffff;
+
+  --shadow: 0 10px 30px rgba(2,6,23,0.06);
+}
+
+/* dark mode variables (applied via .dark on body) */
+body.dark{
+  --bg: linear-gradient(180deg,#0f172a,#081028);
+  --card: rgba(20,26,40,0.82);
+  --muted: #94a3b8;
+  --text: #e6eef8;
+  --primary: #3b82f6;
+  --primary-dark: #60a5fa;
+  --accent: #7dd3fc;
+  --border: rgba(255,255,255,0.06);
+  --table-head: #111827;
+  --table-head-text: #ffffff;
+  --shadow: 0 10px 30px rgba(2,6,23,0.3);
+}
+
+/* ---------- GLOBAL ---------- */
+*{box-sizing:border-box}
+html,body,#root{height:100%}
+body{ margin:0; font-family: "Poppins", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; background:var(--bg); color:var(--text); }
+
+/* App root -> flex to keep footer at bottom */
+.app-root { display:flex; flex-direction:column; min-height:100vh; }
+
+/* ---------- BANNER ---------- */
+.banner-wrapper{ width:100%; display:flex; justify-content:center; padding:16px 0 6px; }
+.banner-track{ width:100%; max-width:1100px; height:120px; background-repeat:no-repeat; background-position:center; background-size:contain; box-shadow: var(--shadow); border-radius:8px; animation: bannerMove 16s linear infinite; }
+@keyframes bannerMove{ 0%{ background-position:left center } 50%{ background-position:right center } 100%{ background-position:left center } }
+
+/* ---------- MAIN LAYOUT ---------- */
+.main-container{ width:100%; max-width:1100px; margin: 8px auto 24px; padding: 0 12px; }
+
+/* header */
+.page-header{ padding: 8px 0 10px; }
+.page-header h1{ margin:6px 0; font-size:26px; color:var(--text); }
+.page-header .subtitle{ margin:0; color:var(--muted); font-size:14px; }
+
+/* ---------- STICKY FILTER ---------- */
+.sticky-filter{ position: sticky; top: 8px; z-index: 30; margin-bottom: 12px; }
+.filter-container.card{ display:flex; align-items:center; padding:12px; gap:12px; background:var(--card); border-radius:12px; border:1px solid var(--border); box-shadow: var(--shadow); }
+
+/* Filter form */
+.filter-row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; width:100%; }
+.input{ display:flex; flex-direction:column; min-width:140px; max-width:220px; }
+.input label{ font-size:12px; color:var(--muted); margin-bottom:6px; }
+.input .input-inner{ position:relative; }
+.input input{
+  width:100%;
+  padding:10px 12px 10px 34px;
+  border-radius:8px;
+  border:1px solid var(--border);
+  background:transparent;
+  color:var(--text);
+}
+
+/* Input icon */
+.input .icon{
+  position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:14px; pointer-events:none;
+}
+
+/* controls (search/reset + dark toggle) */
+.controls{ display:flex; gap:10px; align-items:center; margin-left:6px; }
+.btn{ padding:9px 14px; border-radius:8px; background:linear-gradient(135deg,var(--primary),var(--primary-dark)); color:white; border:none; cursor:pointer; font-weight:700; box-shadow: 0 8px 18px rgba(37,99,235,0.12); }
+.btn:active{ transform: translateY(1px); }
+.btn.ghost{ background: var(--card); color:var(--text); border:1px solid var(--border); box-shadow:none; font-weight:600; }
+
+/* Dark mode toggle (simple) */
+.theme-toggle{ display:flex; align-items:center; gap:8px; font-size:14px; color:var(--muted); cursor:pointer; user-select:none; }
+.toggle-switch{ width:44px; height:24px; background: var(--border); border-radius:999px; position:relative; display:inline-block; padding:3px; }
+.toggle-dot{ width:18px; height:18px; background:white; border-radius:50%; position:absolute; left:3px; top:3px; transition: all .18s ease; }
+body.dark .toggle-dot{ left:23px; background:var(--primary); }
+
+/* ---------- RESULT CARD ---------- */
+.result-card{ padding:12px; background:var(--card); border-radius:12px; border:1px solid var(--border); box-shadow: var(--shadow); }
+
+/* result header row */
+.result-header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:12px; }
+.hint{ color:var(--muted); font-size:14px; }
+
+/* table area */
+.table-area{ width:100%; overflow:auto; border-radius:8px; }
+.table{ width:100%; border-collapse:collapse; min-width:900px; }
+.table thead th{ position:sticky; top:0; background:var(--table-head); color:var(--table-head-text); font-weight:700; padding:10px; text-align:left; font-size:13px; z-index:10; }
+.table th, .table td{ padding:10px 12px; border-bottom:1px solid var(--border); font-size:13px; vertical-align:top; color:var(--text); }
+.table tbody tr:hover td{ background: rgba(37,99,235,0.03); }
+
+/* selected row highlight */
+.table tbody tr.selected td{ background: linear-gradient(90deg, rgba(37,99,235,0.06), rgba(59,130,246,0.03)); border-left:4px solid var(--primary); }
+
+/* compact SR */
+.table .sr{ width:44px; font-weight:700; color:var(--table-head-text); }
+
+/* ---------- PAGINATION ---------- */
+.pagination{ display:flex; gap:8px; justify-content:center; align-items:center; margin-top:12px; }
+.page-btn{ padding:7px 12px; border-radius:8px; background:var(--card); border:1px solid var(--border); cursor:pointer; font-weight:700; color:var(--text); }
+.page-btn.primary{ background:linear-gradient(135deg,var(--primary),var(--primary-dark)); color:white; }
+
+/* ---------- LOADER ---------- */
+.loader-wrap{ display:flex; justify-content:center; align-items:center; padding:14px 0; }
+.spinner{
+  width:42px;
+  height:42px;
+  border-radius:50%;
+  border:5px solid rgba(0,0,0,0.08);
+  border-top-color: var(--primary);
+  animation: spin 1s linear infinite;
+}
+@keyframes spin{ to{ transform: rotate(360deg); } }
+
+/* ---------- FOOTER ---------- */
+.footer{ background: #0f172a; color:white; padding:18px 0; text-align:center; margin-top:auto; }
+.footer h3{ margin:0; color:#93c5fd; }
+.footer p{ margin:6px 0 0; font-size:13px; opacity:0.95; }
+
+/* ---------- RESPONSIVE ---------- */
+@media (max-width:900px){
+  .banner-track{ height:92px; }
+  .filter-container.card{ padding:10px; }
+  .input{ min-width:120px; max-width:180px; }
+  .table{ min-width:720px; }
+}
+@media (max-width:600px){
+  .banner-track{ height:78px; }
+  .main-container{ padding:0 12px; }
+  .filter-container.card{ padding:8px; }
+  .input{ width:100%; min-width:unset; }
+  .controls{ margin-left:0 }
+  .table{ min-width:640px; font-size:12px; }
+}

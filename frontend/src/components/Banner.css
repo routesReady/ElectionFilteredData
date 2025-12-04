@@ -1,0 +1,5 @@
+/* Already included in styles.css, but keep file minimal if component imports it */
+.banner-wrapper { width: 100%; display: flex; justify-content: center; padding: 8px 0; }
+.banner-track { max-width: 1100px; width: 100%; height: 120px; background-repeat: no-repeat; background-size: contain; background-position: left center; animation: bannerMove 16s linear infinite; border-radius: 6px; box-shadow: 0 8px 20px rgba(2,6,23,0.06); }
+@keyframes bannerMove { 0% { background-position: left center; } 50% { background-position: right center; } 100% { background-position: left center; } }
+@media (max-width: 600px) { .banner-track { height: 70px; } }
