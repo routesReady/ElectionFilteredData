@@ -3,7 +3,6 @@ const cors = require("cors");
 const path = require("path");
 const PdfPrinter = require("pdfmake");
 const { loadExcelData } = require("./dataLoader");
-const fs = require("fs");
 
 const app = express();
 app.use(cors());
@@ -15,16 +14,16 @@ app.use(express.json());
 let excelData = loadExcelData();
 
 /* -----------------------------------------
-   FILTERING FUNCTION
+   FILTER FUNCTION
 ----------------------------------------- */
 function applyFilters(data, query) {
   let filtered = [...data];
   const keys = ["PF_NO", "BILL_UNIT", "DESIG", "STATION", "BOOTH"];
 
-  keys.forEach(k => {
+  keys.forEach((k) => {
     if (query[k]) {
       const q = String(query[k]).toLowerCase();
-      filtered = filtered.filter(row =>
+      filtered = filtered.filter((row) =>
         String(row[k] || "").toLowerCase().includes(q)
       );
     }
@@ -34,21 +33,21 @@ function applyFilters(data, query) {
 }
 
 /* -----------------------------------------
-   PDFMAKE FONTS (Render Compatible)
+   PDFMAKE DEFAULT BUILT-IN FONT (NO FILES)
 ----------------------------------------- */
 const fonts = {
-  Roboto: {
-    normal: path.join(__dirname, "fonts/Roboto-Regular.ttf"),
-    bold: path.join(__dirname, "fonts/Roboto-Bold.ttf"),
-    italics: path.join(__dirname, "fonts/Roboto-Italic.ttf"),
-    bolditalics: path.join(__dirname, "fonts/Roboto-BoldItalic.ttf")
-  }
+  Helvetica: {
+    normal: "Helvetica",
+    bold: "Helvetica-Bold",
+    italics: "Helvetica-Oblique",
+    bolditalics: "Helvetica-BoldOblique",
+  },
 };
 
 const printer = new PdfPrinter(fonts);
 
 /* -----------------------------------------
-   API: GET FILTERED DATA + PAGINATION
+   GET FILTERED DATA API
 ----------------------------------------- */
 app.get("/api/data", (req, res) => {
   try {
@@ -65,130 +64,127 @@ app.get("/api/data", (req, res) => {
 
     const finalData = sliced.map((row, idx) => ({
       SR_No: start + idx + 1,
-      ...row
+      ...row,
     }));
 
-    res.json({
-      total,
-      page: p,
-      limit: l,
-      data: finalData
-    });
+    res.json({ total, page: p, limit: l, data: finalData });
   } catch (err) {
     console.error("API error:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
 
-/* ------------------------------------------------------------------
-   STREAM-OPTIMIZED PDF EXPORT (NO 502 ERROR ON RENDER)
------------------------------------------------------------------- */
+/* -----------------------------------------
+   EXPORT FILTERED PDF (CLEAN + CONTINUOUS)
+----------------------------------------- */
 app.get("/api/export/pdf", (req, res) => {
   try {
     const filtered = applyFilters(excelData, req.query);
 
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(
-      "Content-Disposition",
-      "attachment; filename=filtered-data.pdf"
-    );
-
-    const doc = printer.createPdfKitDocument({
-      pageOrientation: "landscape",
-      pageMargins: [20, 40, 20, 40],
-
-      // THE FIX: Correct default font handling
-      defaultStyle: { font: "Roboto" },
-
-      watermark: {
-        text: "WCRMS KOTA",
-        opacity: 0.22,
-        bold: true,
-        color: "black",
-        angle: -35
-      }
-    });
-
-    doc.pipe(res);
-
-    /** TITLE **/
-    doc.fontSize(15).text("Filtered Data List", { align: "center" });
-    doc.moveDown(1);
+    const rows = filtered.map((r, i) => ({
+      SR_No: i + 1,
+      PF_NO: r.PF_NO,
+      NAME: r.NAME,
+      FATHER_NAME: r.FATHER_NAME,
+      BILL_UNIT: r.BILL_UNIT,
+      DESIG: r.DESIG,
+      MOBILE_NO: r.MOBILE_NO,
+      STATION: r.STATION,
+      BOOTH: r.BOOTH,
+    }));
 
     const columns = [
-      "SR_No", "PF_NO", "NAME", "FATHER_NAME",
-      "BILL_UNIT", "DESIG", "MOBILE_NO",
-      "STATION", "BOOTH"
+      "SR_No",
+      "PF_NO",
+      "NAME",
+      "FATHER_NAME",
+      "BILL_UNIT",
+      "DESIG",
+      "MOBILE_NO",
+      "STATION",
+      "BOOTH",
     ];
 
-    const colWidths = [35, 70, 120, 120, 60, 80, 90, 70, 70];
+    const widths = [30, 70, 110, 110, 55, 80, 70, 60, 60];
 
-    /** HEADER **/
-    let headerY = doc.y;
-    columns.forEach((col, i) => {
-      const x = 20 + colWidths.slice(0, i).reduce((a, b) => a + b, 0);
+    const header = columns.map((col) => ({
+      text: col,
+      style: "tableHeader",
+      alignment: "center",
+    }));
 
-      doc.rect(x, headerY, colWidths[i], 18).fill("#1e293b");
-      doc.fillColor("white").fontSize(9)
-        .text(col, x + 3, headerY + 4);
-    });
+    const bodyRows = rows.map((r) =>
+      columns.map((c) => ({
+        text: String(r[c] || ""),
+        style: "tableCell",
+      }))
+    );
 
-    doc.moveDown(2);
+    const docDefinition = {
+      pageOrientation: "landscape",
+      pageMargins: [15, 25, 15, 25],
 
-    let y = doc.y;
+      header: {
+        text: "WCRMS KOTA — Filtered Data List",
+        style: "headerStyle",
+        margin: [0, 10],
+      },
 
-    /** STREAM ROWS (Memory efficient for 8844 rows) **/
-    filtered.forEach((row, idx) => {
-      const rowData = [
-        idx + 1,
-        row.PF_NO,
-        row.NAME,
-        row.FATHER_NAME,
-        row.BILL_UNIT,
-        row.DESIG,
-        row.MOBILE_NO,
-        row.STATION,
-        row.BOOTH
-      ];
+      footer: (currentPage, pageCount) => ({
+        text: `Page ${currentPage} of ${pageCount}`,
+        alignment: "center",
+        margin: [0, 10],
+      }),
 
-      // row shading
-      if (idx % 2 === 0) {
-        doc.rect(20, y - 2, colWidths.reduce((a, b) => a + b, 0), 16)
-          .fillOpacity(0.12).fill("#dbeafe").fillOpacity(1);
-      }
+      content: [
+        {
+          table: {
+            headerRows: 1,
+            widths,
+            body: [header, ...bodyRows],
+          },
+          layout: {
+            fillColor: (rowIndex) =>
+              rowIndex === 0 ? "#1e293b" : rowIndex % 2 === 0 ? "#f3f3f3" : null,
+            hLineWidth: () => 0.4,
+            vLineWidth: () => 0.4,
+            hLineColor: () => "#b5b5b5",
+            vLineColor: () => "#b5b5b5",
+          },
+        },
+      ],
 
-      // row content
-      rowData.forEach((cell, i) => {
-        const x = 20 + colWidths.slice(0, i).reduce((a, b) => a + b, 0);
+      styles: {
+        headerStyle: {
+          fontSize: 14,
+          bold: true,
+          alignment: "center",
+        },
+        tableHeader: {
+          bold: true,
+          color: "white",
+          fontSize: 9,
+          margin: [2, 2],
+        },
+        tableCell: {
+          margin: [2, 2],
+          fontSize: 8.5,
+        },
+      },
 
-        doc.fillColor("#000").fontSize(8.5)
-          .text(String(cell || ""), x + 3, y, { width: colWidths[i] });
-      });
+      defaultStyle: {
+        font: "Helvetica",
+      },
+    };
 
-      y += 16;
+    const pdfDoc = printer.createPdfKitDocument(docDefinition);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", "attachment; filename=filtered-data.pdf");
 
-      /** PAGE BREAK **/
-      if (y > 530) {
-        doc.addPage({ pageOrientation: "landscape", margin: 40 });
-        y = 60;
-
-        // redraw header on new page
-        const newHeaderY = y - 20;
-
-        columns.forEach((col, i) => {
-          const x = 20 + colWidths.slice(0, i).reduce((a, b) => a + b, 0);
-          doc.rect(x, newHeaderY, colWidths[i], 18).fill("#1e293b");
-          doc.fillColor("white").fontSize(9).text(col, x + 3, newHeaderY + 4);
-        });
-
-        y += 20;
-      }
-    });
-
-    doc.end();
-
+    pdfDoc.pipe(res);
+    pdfDoc.end();
   } catch (err) {
-    console.error("PDF Error:", err);
+    console.error("PDF error:", err);
     res.status(500).json({ error: "PDF generation failed" });
   }
 });
@@ -201,7 +197,9 @@ app.get("/", (req, res) => {
 });
 
 /* -----------------------------------------
-   START SERVER (Render Compatible)
+   START SERVER
 ----------------------------------------- */
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🔥 Server running on port ${PORT}`));
+app.listen(PORT, () =>
+  console.log(`🔥 Server running on port ${PORT}`)
+);
