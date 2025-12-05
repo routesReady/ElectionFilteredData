@@ -20,10 +20,10 @@ function applyFilters(data, query) {
   let filtered = [...data];
   const keys = ["PF_NO", "BILL_UNIT", "DESIG", "STATION", "BOOTH"];
 
-  keys.forEach(k => {
+  keys.forEach((k) => {
     if (query[k]) {
       const q = String(query[k]).toLowerCase();
-      filtered = filtered.filter(row =>
+      filtered = filtered.filter((row) =>
         String(row[k] || "").toLowerCase().includes(q)
       );
     }
@@ -33,21 +33,21 @@ function applyFilters(data, query) {
 }
 
 /* -----------------------------------------
-   PDFMAKE FONTS (Render Safe)
+   PDFMAKE DEFAULT BUILT-IN FONT (NO FILES)
 ----------------------------------------- */
 const fonts = {
-  Roboto: {
-    normal: path.join(__dirname, "fonts/Roboto-Regular.ttf"),
-    bold: path.join(__dirname, "fonts/Roboto-Bold.ttf"),
-    italics: path.join(__dirname, "fonts/Roboto-Italic.ttf"),
-    bolditalics: path.join(__dirname, "fonts/Roboto-BoldItalic.ttf"),
-  }
+  Helvetica: {
+    normal: "Helvetica",
+    bold: "Helvetica-Bold",
+    italics: "Helvetica-Oblique",
+    bolditalics: "Helvetica-BoldOblique",
+  },
 };
 
 const printer = new PdfPrinter(fonts);
 
 /* -----------------------------------------
-   GET PAGINATED DATA
+   GET FILTERED DATA API
 ----------------------------------------- */
 app.get("/api/data", (req, res) => {
   try {
@@ -58,13 +58,13 @@ app.get("/api/data", (req, res) => {
 
     const p = Math.max(1, parseInt(page));
     const l = Math.max(1, parseInt(limit));
-    const start = (p - 1) * l;
 
+    const start = (p - 1) * l;
     const sliced = filtered.slice(start, start + l);
 
     const finalData = sliced.map((row, idx) => ({
       SR_No: start + idx + 1,
-      ...row
+      ...row,
     }));
 
     res.json({ total, page: p, limit: l, data: finalData });
@@ -75,13 +75,12 @@ app.get("/api/data", (req, res) => {
 });
 
 /* -----------------------------------------
-   EXPORT PDF (CHUNKED + HEADER/FOOTER + LOGO)
+   EXPORT FILTERED PDF (CLEAN + CONTINUOUS)
 ----------------------------------------- */
 app.get("/api/export/pdf", (req, res) => {
   try {
     const filtered = applyFilters(excelData, req.query);
 
-    // Prepare rows with auto SR_No
     const rows = filtered.map((r, i) => ({
       SR_No: i + 1,
       PF_NO: r.PF_NO,
@@ -91,10 +90,9 @@ app.get("/api/export/pdf", (req, res) => {
       DESIG: r.DESIG,
       MOBILE_NO: r.MOBILE_NO,
       STATION: r.STATION,
-      BOOTH: r.BOOTH,
+      BOOTH: r.BOOTH
     }));
 
-    // Column order
     const columns = [
       "SR_No",
       "PF_NO",
@@ -109,108 +107,76 @@ app.get("/api/export/pdf", (req, res) => {
 
     const widths = [35, 70, 110, 110, 60, 80, 90, 70, 70];
 
-    // Header row
     const tableHeaders = columns.map(col => ({
       text: col,
       style: "tableHeader"
     }));
 
-    /* -----------------------------------------
-       CHUNKED ROW GENERATION (prevents memory crashes)
-    ----------------------------------------- */
-    const tableRows = [];
-    const CHUNK_SIZE = 500;
+    const tableRows = rows.map(r =>
+      columns.map(col => ({
+        text: String(r[col] || ""),
+        style: "tableCell"
+      }))
+    );
 
-    for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
-      const chunk = rows.slice(i, i + CHUNK_SIZE);
-      chunk.forEach(r => {
-        tableRows.push(
-          columns.map(col => ({
-            text: String(r[col] || ""),
-            style: "tableCell"
-          }))
-        );
-      });
-    }
-
-    /* -----------------------------------------
-       PDF DOCUMENT
-    ----------------------------------------- */
     const docDefinition = {
       pageOrientation: "landscape",
-      pageMargins: [25, 60, 25, 50],
-
-      header: {
-        columns: [
-          {
-            image: path.join(__dirname, "logo.png"), // PLACE YOUR LOGO HERE
-            width: 60,
-            margin: [20, 10, 0, 0]
-          },
-          {
-            text: "WCRMS Employee Filtered Data Report",
-            alignment: "center",
-            margin: [0, 25, 0, 0],
-            fontSize: 16,
-            bold: true
-          }
-        ]
-      },
-
-      footer: function (currentPage, pageCount) {
-        return {
-          text: `Page ${currentPage} of ${pageCount}   |   © WCRMS KOTA`,
-          alignment: "center",
-          margin: [0, 10, 0, 0],
-          fontSize: 10,
-        };
-      },
-
+      pageMargins: [40, 60, 40, 50], // Center better
       watermark: {
         text: "WCRMS KOTA",
-        color: "black",
-        opacity: 0.21,
+        color: "#000000",
+        opacity: 0.22,
         bold: true,
+        italics: false,
         angle: -45
       },
 
       content: [
         {
+          text: "WCRMS KOTA — Filtered Data List",
+          style: "title",
+          margin: [0, 0, 0, 10]
+        },
+        {
+          alignment: "center",   // ⭐ CENTER TABLE BLOCK
           table: {
             headerRows: 1,
             widths,
             body: [tableHeaders, ...tableRows]
           },
           layout: {
-            fillColor: row => (row % 2 === 0 ? "#f2f2f2" : null),
+            fillColor: row => (row % 2 === 0 ? "#f5f5f5" : null),
             hLineWidth: () => 0.7,
             vLineWidth: () => 0.7,
-            hLineColor: () => "#b5b5b5",
-            vLineColor: () => "#b5b5b5",
+            hLineColor: () => "#bfbfbf",
+            vLineColor: () => "#bfbfbf"
           }
         }
       ],
 
       styles: {
+        title: {
+          fontSize: 16,
+          bold: true,
+          alignment: "center"
+        },
         tableHeader: {
-          fillColor: "#1e293b",
+          fillColor: "#0f172a",
           color: "white",
           bold: true,
-          margin: 3,
-          fontSize: 10
+          fontSize: 10,
+          margin: 4
         },
         tableCell: {
-          margin: 3,
           fontSize: 9,
-          color: "#000"
+          margin: 3,
+          color: "#000000"
         }
       }
     };
 
-    /* -----------------------------------------
-       STREAM PDF SAFELY (Render friendly)
-    ----------------------------------------- */
     const pdfDoc = printer.createPdfKitDocument(docDefinition);
+
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
@@ -226,15 +192,18 @@ app.get("/api/export/pdf", (req, res) => {
   }
 });
 
+
 /* -----------------------------------------
    ROOT ROUTE
 ----------------------------------------- */
 app.get("/", (req, res) => {
-  res.send("🚀 Backend is live and running!");
+  res.send("🚀 Backend is running!");
 });
 
 /* -----------------------------------------
    START SERVER
 ----------------------------------------- */
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🔥 Server running on port ${PORT}`));
+app.listen(PORT, () =>
+  console.log(`🔥 Server running on port ${PORT}`)
+);
