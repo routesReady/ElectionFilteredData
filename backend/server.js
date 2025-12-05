@@ -49,139 +49,9 @@ const printer = new PdfPrinter(fonts);
 /* -----------------------------------------
    API: GET FILTERED DATA WITH PAGINATION
 ----------------------------------------- */
-app.get("/api/data", (req, res) => {
-  try {
-    const { page = 1, limit = 10 } = req.query;
-
-    const filtered = applyFilters(excelData, req.query);
-    const total = filtered.length;
-
-    const p = Math.max(1, parseInt(page));
-    const l = Math.max(1, parseInt(limit));
-
-    const start = (p - 1) * l;
-    const sliced = filtered.slice(start, start + l);
-
-    const finalData = sliced.map((row, idx) => ({
-      SR_No: start + idx + 1,
-      ...row
-    }));
-
-    res.json({
-      total,
-      page: p,
-      limit: l,
-      data: finalData
-    });
-  } catch (err) {
-    console.error("API error:", err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-/* -----------------------------------------
-   API: EXPORT FILTERED PDF (FINAL)
------------------------------------------ */
 app.get("/api/export/pdf", (req, res) => {
   try {
     const filtered = applyFilters(excelData, req.query);
-
-    // Prepare rows with auto SR_No
-    const rows = filtered.map((r, i) => ({
-      SR_No: i + 1,
-      PF_NO: r.PF_NO,
-      NAME: r.NAME,
-      FATHER_NAME: r.FATHER_NAME,
-      BILL_UNIT: r.BILL_UNIT,
-      DESIG: r.DESIG,
-      MOBILE_NO: r.MOBILE_NO,
-      STATION: r.STATION,
-      BOOTH: r.BOOTH
-    }));
-
-    // Column order
-    const columns = [
-      "SR_No",
-      "PF_NO",
-      "NAME",
-      "FATHER_NAME",
-      "BILL_UNIT",
-      "DESIG",
-      "MOBILE_NO",
-      "STATION",
-      "BOOTH"
-    ];
-
-    // Column widths (landscape fit)
-    const widths = [35, 70, 110, 110, 60, 80, 90, 70, 70];
-
-    // Header row
-    const tableHeaders = columns.map(col => ({
-      text: col,
-      style: "tableHeader"
-    }));
-
-    // Table body rows
-    const tableRows = rows.map(r =>
-      columns.map(col => ({
-        text: String(r[col] || ""),
-        style: "tableCell"
-      }))
-    );
-
-    // PDF Document Definition
-    const docDefinition = {
-      pageOrientation: "landscape",
-      pageMargins: [25, 35, 25, 35],
-
-      watermark: {
-        text: "WCRMS KOTA",
-        color: "black",
-        opacity: 0.22,
-        bold: true,
-        angle: -45
-      },
-
-      content: [
-        { text: "Filtered Data List", style: "title", margin: [0, 0, 0, 12] },
-        {
-          table: {
-            headerRows: 1,
-            widths,
-            body: [tableHeaders, ...tableRows]
-          },
-          layout: {
-            fillColor: row => (row % 2 === 0 ? "#f2f2f2" : null),
-            hLineWidth: () => 0.7,
-            vLineWidth: () => 0.7,
-            hLineColor: () => "#b5b5b5",
-            vLineColor: () => "#b5b5b5"
-          }
-        }
-      ],
-
-      styles: {
-        title: {
-          fontSize: 16,
-          bold: true,
-          alignment: "center"
-        },
-        tableHeader: {
-          fillColor: "#1e293b",
-          color: "white",
-          bold: true,
-          margin: 3,
-          fontSize: 10
-        },
-        tableCell: {
-          margin: 3,
-          fontSize: 9,
-          color: "#000"
-        }
-      }
-    };
-
-    const pdfDoc = printer.createPdfKitDocument(docDefinition);
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
@@ -189,14 +59,116 @@ app.get("/api/export/pdf", (req, res) => {
       "attachment; filename=filtered-data.pdf"
     );
 
-    pdfDoc.pipe(res);
-    pdfDoc.end();
+    const doc = printer.createPdfKitDocument({
+      pageOrientation: "landscape",
+      pageMargins: [20, 40, 20, 40],
+      watermark: {
+        text: "WCRMS KOTA",
+        opacity: 0.22,
+        bold: true,
+        color: "black",
+        angle: -35
+      }
+    });
+
+    doc.pipe(res);
+
+    // Title
+    doc.fontSize(15).font("Roboto-Bold").text("Filtered Data List", { align: "center" });
+    doc.moveDown(1);
+
+    // Column names
+    const columns = [
+      "SR_No", "PF_NO", "NAME", "FATHER_NAME",
+      "BILL_UNIT", "DESIG", "MOBILE_NO",
+      "STATION", "BOOTH"
+    ];
+
+    // Column widths optimized for 8844 rows (fast processing)
+    const colWidths = [35, 70, 120, 120, 60, 80, 90, 70, 70];
+
+    // Draw table header
+    let startX = 20;
+    let headerY = doc.y;
+
+    columns.forEach((col, i) => {
+      const x = startX + colWidths.slice(0, i).reduce((a, b) => a + b, 0);
+
+      doc
+        .rect(x, headerY, colWidths[i], 18)
+        .fill("#1e293b");
+
+      doc
+        .fillColor("white")
+        .font("Roboto-Bold")
+        .fontSize(9)
+        .text(col, x + 3, headerY + 4, { width: colWidths[i] });
+    });
+
+    doc.moveDown(2);
+    let y = doc.y;
+
+    /** Stream rows one by one — FIX for 8844 rows */
+    filtered.forEach((row, idx) => {
+      const rowData = [
+        idx + 1,
+        row.PF_NO,
+        row.NAME,
+        row.FATHER_NAME,
+        row.BILL_UNIT,
+        row.DESIG,
+        row.MOBILE_NO,
+        row.STATION,
+        row.BOOTH
+      ];
+
+      // Row background shading (striped rows)
+      if (idx % 2 === 0) {
+        doc.rect(20, y - 2, colWidths.reduce((a, b) => a + b, 0), 16).fillOpacity(0.12).fill("#dbeafe").fillOpacity(1);
+      }
+
+      // Reset fill for text
+      doc.fillColor("#000");
+
+      // Draw each cell
+      rowData.forEach((cell, i) => {
+        const x = 20 + colWidths.slice(0, i).reduce((a, b) => a + b, 0);
+
+        doc
+          .font("Roboto-Regular")
+          .fontSize(8.5)
+          .fillColor("#000")
+          .text(String(cell || ""), x + 3, y, { width: colWidths[i], height: 12 });
+      });
+
+      y += 16;
+
+      /** Page break logic */
+      if (y > 530) {
+        doc.addPage({ pageOrientation: "landscape", margin: 40 });
+        y = 60;
+
+        // redraw header on new page
+        let headerTop = y - 20;
+        columns.forEach((col, i) => {
+          const x = 20 + colWidths.slice(0, i).reduce((a, b) => a + b, 0);
+
+          doc.rect(x, headerTop, colWidths[i], 18).fill("#1e293b");
+          doc.fillColor("white").font("Roboto-Bold").fontSize(9).text(col, x + 3, headerTop + 4, { width: colWidths[i] });
+        });
+
+        y += 20;
+      }
+    });
+
+    doc.end();
 
   } catch (err) {
-    console.error("PDF generation error:", err);
+    console.error("PDF Error:", err);
     res.status(500).json({ error: "PDF generation failed" });
   }
 });
+
 
 /* -----------------------------------------
    ROOT ROUTE
