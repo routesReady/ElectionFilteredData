@@ -9,7 +9,7 @@ app.use(cors());
 app.use(express.json());
 
 /* -----------------------------------------
-   LOAD EXCEL DATA (CommonJS Safe)
+   LOAD EXCEL DATA
 ----------------------------------------- */
 let excelData = loadExcelData();
 
@@ -33,7 +33,7 @@ function applyFilters(data, query) {
 }
 
 /* -----------------------------------------
-   PDFMAKE FONTS (RENDER COMPATIBLE)
+   PDFMAKE FONTS (Render Compatible)
 ----------------------------------------- */
 const fonts = {
   Roboto: {
@@ -47,8 +47,42 @@ const fonts = {
 const printer = new PdfPrinter(fonts);
 
 /* -----------------------------------------
-   API: GET FILTERED DATA WITH PAGINATION
+   API: GET FILTERED DATA + PAGINATION
 ----------------------------------------- */
+app.get("/api/data", (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+
+    const filtered = applyFilters(excelData, req.query);
+    const total = filtered.length;
+
+    const p = Math.max(1, parseInt(page));
+    const l = Math.max(1, parseInt(limit));
+
+    const start = (p - 1) * l;
+    const sliced = filtered.slice(start, start + l);
+
+    const finalData = sliced.map((row, idx) => ({
+      SR_No: start + idx + 1,
+      ...row
+    }));
+
+    res.json({
+      total,
+      page: p,
+      limit: l,
+      data: finalData
+    });
+  } catch (err) {
+    console.error("API error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+/* ------------------------------------------------------------------
+   STREAM-OPTIMIZED PDF EXPORT (NO 502 ERROR)
+   Supports 8,844+ rows without crashing Render
+------------------------------------------------------------------ */
 app.get("/api/export/pdf", (req, res) => {
   try {
     const filtered = applyFilters(excelData, req.query);
@@ -77,27 +111,21 @@ app.get("/api/export/pdf", (req, res) => {
     doc.fontSize(15).font("Roboto-Bold").text("Filtered Data List", { align: "center" });
     doc.moveDown(1);
 
-    // Column names
+    // Columns & widths
     const columns = [
       "SR_No", "PF_NO", "NAME", "FATHER_NAME",
       "BILL_UNIT", "DESIG", "MOBILE_NO",
       "STATION", "BOOTH"
     ];
-
-    // Column widths optimized for 8844 rows (fast processing)
     const colWidths = [35, 70, 120, 120, 60, 80, 90, 70, 70];
 
-    // Draw table header
-    let startX = 20;
+    // Draw header row
     let headerY = doc.y;
-
     columns.forEach((col, i) => {
-      const x = startX + colWidths.slice(0, i).reduce((a, b) => a + b, 0);
-
+      const x = 20 + colWidths.slice(0, i).reduce((a, b) => a + b, 0);
       doc
         .rect(x, headerY, colWidths[i], 18)
         .fill("#1e293b");
-
       doc
         .fillColor("white")
         .font("Roboto-Bold")
@@ -108,7 +136,7 @@ app.get("/api/export/pdf", (req, res) => {
     doc.moveDown(2);
     let y = doc.y;
 
-    /** Stream rows one by one — FIX for 8844 rows */
+    /* STREAM ROWS ONE-BY-ONE (Memory Efficient) */
     filtered.forEach((row, idx) => {
       const rowData = [
         idx + 1,
@@ -122,39 +150,37 @@ app.get("/api/export/pdf", (req, res) => {
         row.BOOTH
       ];
 
-      // Row background shading (striped rows)
+      // Row shading
       if (idx % 2 === 0) {
-        doc.rect(20, y - 2, colWidths.reduce((a, b) => a + b, 0), 16).fillOpacity(0.12).fill("#dbeafe").fillOpacity(1);
+        doc.rect(20, y - 2, colWidths.reduce((a, b) => a + b, 0), 16)
+          .fillOpacity(0.12)
+          .fill("#dbeafe")
+          .fillOpacity(1);
       }
 
-      // Reset fill for text
-      doc.fillColor("#000");
-
-      // Draw each cell
+      // Write row data
       rowData.forEach((cell, i) => {
         const x = 20 + colWidths.slice(0, i).reduce((a, b) => a + b, 0);
-
         doc
           .font("Roboto-Regular")
           .fontSize(8.5)
           .fillColor("#000")
-          .text(String(cell || ""), x + 3, y, { width: colWidths[i], height: 12 });
+          .text(String(cell || ""), x + 3, y, { width: colWidths[i] });
       });
 
       y += 16;
 
-      /** Page break logic */
+      // Page break logic
       if (y > 530) {
         doc.addPage({ pageOrientation: "landscape", margin: 40 });
         y = 60;
 
-        // redraw header on new page
-        let headerTop = y - 20;
+        // redraw header
+        const newHeaderY = y - 20;
         columns.forEach((col, i) => {
           const x = 20 + colWidths.slice(0, i).reduce((a, b) => a + b, 0);
-
-          doc.rect(x, headerTop, colWidths[i], 18).fill("#1e293b");
-          doc.fillColor("white").font("Roboto-Bold").fontSize(9).text(col, x + 3, headerTop + 4, { width: colWidths[i] });
+          doc.rect(x, newHeaderY, colWidths[i], 18).fill("#1e293b");
+          doc.fillColor("white").font("Roboto-Bold").fontSize(9).text(col, x + 3, newHeaderY + 4);
         });
 
         y += 20;
@@ -169,12 +195,11 @@ app.get("/api/export/pdf", (req, res) => {
   }
 });
 
-
 /* -----------------------------------------
    ROOT ROUTE
 ----------------------------------------- */
 app.get("/", (req, res) => {
-  res.send("🚀 Backend is running successfully!");
+  res.send("🚀 Backend is running!");
 });
 
 /* -----------------------------------------
