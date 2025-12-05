@@ -3,6 +3,7 @@ const cors = require("cors");
 const path = require("path");
 const PdfPrinter = require("pdfmake");
 const { loadExcelData } = require("./dataLoader");
+const fs = require("fs");
 
 const app = express();
 app.use(cors());
@@ -81,7 +82,6 @@ app.get("/api/data", (req, res) => {
 
 /* ------------------------------------------------------------------
    STREAM-OPTIMIZED PDF EXPORT (NO 502 ERROR ON RENDER)
-   Can handle 8,844+ rows smoothly
 ------------------------------------------------------------------ */
 app.get("/api/export/pdf", (req, res) => {
   try {
@@ -96,6 +96,10 @@ app.get("/api/export/pdf", (req, res) => {
     const doc = printer.createPdfKitDocument({
       pageOrientation: "landscape",
       pageMargins: [20, 40, 20, 40],
+
+      // THE FIX: Correct default font handling
+      defaultStyle: { font: "Roboto" },
+
       watermark: {
         text: "WCRMS KOTA",
         opacity: 0.22,
@@ -107,8 +111,8 @@ app.get("/api/export/pdf", (req, res) => {
 
     doc.pipe(res);
 
-    // Title
-    doc.font("Roboto").fontSize(15).text("Filtered Data List", { align: "center" });
+    /** TITLE **/
+    doc.fontSize(15).text("Filtered Data List", { align: "center" });
     doc.moveDown(1);
 
     const columns = [
@@ -119,20 +123,21 @@ app.get("/api/export/pdf", (req, res) => {
 
     const colWidths = [35, 70, 120, 120, 60, 80, 90, 70, 70];
 
-    // Draw header
+    /** HEADER **/
     let headerY = doc.y;
     columns.forEach((col, i) => {
       const x = 20 + colWidths.slice(0, i).reduce((a, b) => a + b, 0);
 
       doc.rect(x, headerY, colWidths[i], 18).fill("#1e293b");
-      doc.fillColor("white").font("Roboto").fontSize(9)
+      doc.fillColor("white").fontSize(9)
         .text(col, x + 3, headerY + 4);
     });
 
     doc.moveDown(2);
+
     let y = doc.y;
 
-    // STREAM ROWS ONE BY ONE
+    /** STREAM ROWS (Memory efficient for 8844 rows) **/
     filtered.forEach((row, idx) => {
       const rowData = [
         idx + 1,
@@ -146,35 +151,34 @@ app.get("/api/export/pdf", (req, res) => {
         row.BOOTH
       ];
 
-      // Row shading
+      // row shading
       if (idx % 2 === 0) {
         doc.rect(20, y - 2, colWidths.reduce((a, b) => a + b, 0), 16)
-          .fillOpacity(0.12)
-          .fill("#dbeafe")
-          .fillOpacity(1);
+          .fillOpacity(0.12).fill("#dbeafe").fillOpacity(1);
       }
 
-      // Print row cells
+      // row content
       rowData.forEach((cell, i) => {
         const x = 20 + colWidths.slice(0, i).reduce((a, b) => a + b, 0);
-        doc.font("Roboto").fontSize(8.5).fillColor("#000")
+
+        doc.fillColor("#000").fontSize(8.5)
           .text(String(cell || ""), x + 3, y, { width: colWidths[i] });
       });
 
       y += 16;
 
-      // Auto Page Break
+      /** PAGE BREAK **/
       if (y > 530) {
         doc.addPage({ pageOrientation: "landscape", margin: 40 });
         y = 60;
 
-        // Redraw header on new page
+        // redraw header on new page
         const newHeaderY = y - 20;
+
         columns.forEach((col, i) => {
           const x = 20 + colWidths.slice(0, i).reduce((a, b) => a + b, 0);
           doc.rect(x, newHeaderY, colWidths[i], 18).fill("#1e293b");
-          doc.fillColor("white").font("Roboto").fontSize(9)
-            .text(col, x + 3, newHeaderY + 4);
+          doc.fillColor("white").fontSize(9).text(col, x + 3, newHeaderY + 4);
         });
 
         y += 20;
