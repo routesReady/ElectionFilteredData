@@ -1,3 +1,6 @@
+/* ==========================================================
+   IMPORTS & APP CONFIGURATION
+========================================================== */
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
@@ -8,23 +11,23 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-/* -----------------------------------------
-   LOAD EXCEL DATA
------------------------------------------ */
+/* ==========================================================
+   LOAD EXCEL INTO MEMORY
+========================================================== */
 let excelData = loadExcelData();
 
-/* -----------------------------------------
-   FILTER FUNCTION
------------------------------------------ */
+/* ==========================================================
+   FILTER UTILITY
+========================================================== */
 function applyFilters(data, query) {
-  let filtered = [...data];
   const keys = ["PF_NO", "BILL_UNIT", "DESIG", "STATION", "BOOTH"];
+  let filtered = [...data];
 
-  keys.forEach((k) => {
-    if (query[k]) {
-      const q = String(query[k]).toLowerCase();
-      filtered = filtered.filter((row) =>
-        String(row[k] || "").toLowerCase().includes(q)
+  keys.forEach(key => {
+    if (query[key]) {
+      const q = String(query[key]).toLowerCase();
+      filtered = filtered.filter(row =>
+        String(row[key] || "").toLowerCase().includes(q)
       );
     }
   });
@@ -32,23 +35,23 @@ function applyFilters(data, query) {
   return filtered;
 }
 
-/* -----------------------------------------
-   PDFMAKE DEFAULT BUILT-IN FONT (NO FILES)
------------------------------------------ */
+/* ==========================================================
+   PDF FONTS (Render-safe)
+========================================================== */
 const fonts = {
-  Helvetica: {
-    normal: "Helvetica",
-    bold: "Helvetica-Bold",
-    italics: "Helvetica-Oblique",
-    bolditalics: "Helvetica-BoldOblique",
-  },
+  Roboto: {
+    normal: path.join(__dirname, "fonts/Roboto-Regular.ttf"),
+    bold: path.join(__dirname, "fonts/Roboto-Bold.ttf"),
+    italics: path.join(__dirname, "fonts/Roboto-Italic.ttf"),
+    bolditalics: path.join(__dirname, "fonts/Roboto-BoldItalic.ttf")
+  }
 };
 
 const printer = new PdfPrinter(fonts);
 
-/* -----------------------------------------
-   GET FILTERED DATA API
------------------------------------------ */
+/* ==========================================================
+   API: FETCH FILTERED DATA
+========================================================== */
 app.get("/api/data", (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
@@ -62,21 +65,26 @@ app.get("/api/data", (req, res) => {
     const start = (p - 1) * l;
     const sliced = filtered.slice(start, start + l);
 
-    const finalData = sliced.map((row, idx) => ({
+    const processed = sliced.map((row, idx) => ({
       SR_No: start + idx + 1,
-      ...row,
+      ...row
     }));
 
-    res.json({ total, page: p, limit: l, data: finalData });
+    res.json({
+      total,
+      page: p,
+      limit: l,
+      data: processed
+    });
   } catch (err) {
-    console.error("API error:", err);
+    console.error("Data API error:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
 
-/* -----------------------------------------
-   EXPORT FILTERED PDF (CLEAN + CONTINUOUS)
------------------------------------------ */
+/* ==========================================================
+   API: EXPORT PDF (WITH HEADER + FOOTER + LOGO)
+========================================================== */
 app.get("/api/export/pdf", (req, res) => {
   try {
     const filtered = applyFilters(excelData, req.query);
@@ -90,7 +98,7 @@ app.get("/api/export/pdf", (req, res) => {
       DESIG: r.DESIG,
       MOBILE_NO: r.MOBILE_NO,
       STATION: r.STATION,
-      BOOTH: r.BOOTH,
+      BOOTH: r.BOOTH
     }));
 
     const columns = [
@@ -102,84 +110,121 @@ app.get("/api/export/pdf", (req, res) => {
       "DESIG",
       "MOBILE_NO",
       "STATION",
-      "BOOTH",
+      "BOOTH"
     ];
 
-    const widths = [30, 70, 110, 110, 55, 80, 70, 60, 60];
+    const widths = [35, 70, 110, 110, 60, 80, 90, 70, 70];
 
-    const header = columns.map((col) => ({
+    const tableHeaders = columns.map(col => ({
       text: col,
-      style: "tableHeader",
-      alignment: "center",
+      style: "tableHeader"
     }));
 
-    const bodyRows = rows.map((r) =>
-      columns.map((c) => ({
-        text: String(r[c] || ""),
-        style: "tableCell",
+    const tableRows = rows.map(r =>
+      columns.map(col => ({
+        text: String(r[col] || ""),
+        style: "tableCell"
       }))
     );
 
+    /* --------------------- LOGO PATH ---------------------- */
+    const logoPath = path.join(__dirname, "assets/logo.png");
+
+    /* ------------------ PDF DOCUMENT STRUCTURE ------------------ */
     const docDefinition = {
       pageOrientation: "landscape",
-      pageMargins: [15, 25, 15, 25],
+      pageMargins: [40, 90, 40, 60], // room for header + footer
 
-      header: {
-        text: "WCRMS KOTA — Filtered Data List",
-        style: "headerStyle",
-        margin: [0, 10],
+      /* -------- WATERMARK -------- */
+      watermark: {
+        text: "WCRMS KOTA",
+        color: "#000000",
+        opacity: 0.22,
+        bold: true,
+        angle: -45
       },
 
-      footer: (currentPage, pageCount) => ({
-        text: `Page ${currentPage} of ${pageCount}`,
-        alignment: "center",
-        margin: [0, 10],
-      }),
+      /* -------- PAGE HEADER -------- */
+      header: {
+        margin: [40, 20, 40, 0],
+        columns: [
+          {
+            image: logoPath,
+            width: 60
+          },
+          {
+            text: "WCRMS KOTA — Employee Filtered Report",
+            alignment: "center",
+            fontSize: 18,
+            bold: true,
+            margin: [0, 15, 0, 0]
+          },
+          { text: "" }
+        ]
+      },
 
+      /* -------- PAGE FOOTER -------- */
+      footer: function (currentPage, pageCount) {
+        return {
+          columns: [
+            {
+              text: `Generated by: M. A. Khan | 9001015311`,
+              fontSize: 10,
+              margin: [40, 0, 0, 0],
+              color: "#333"
+            },
+            {
+              text: `Page ${currentPage} of ${pageCount}`,
+              alignment: "right",
+              fontSize: 10,
+              margin: [0, 0, 40, 0]
+            }
+          ]
+        };
+      },
+
+      /* -------- CONTENT (TABLE) -------- */
       content: [
         {
+          alignment: "center",
           table: {
             headerRows: 1,
             widths,
-            body: [header, ...bodyRows],
+            body: [tableHeaders, ...tableRows]
           },
           layout: {
-            fillColor: (rowIndex) =>
-              rowIndex === 0 ? "#1e293b" : rowIndex % 2 === 0 ? "#f3f3f3" : null,
-            hLineWidth: () => 0.4,
-            vLineWidth: () => 0.4,
+            fillColor: r => (r % 2 === 0 ? "#f2f2f2" : null),
+            hLineWidth: () => 0.7,
+            vLineWidth: () => 0.7,
             hLineColor: () => "#b5b5b5",
-            vLineColor: () => "#b5b5b5",
-          },
-        },
+            vLineColor: () => "#b5b5b5"
+          }
+        }
       ],
 
+      /* -------- STYLES -------- */
       styles: {
-        headerStyle: {
-          fontSize: 14,
-          bold: true,
-          alignment: "center",
-        },
         tableHeader: {
-          bold: true,
+          fillColor: "#1e293b",
           color: "white",
-          fontSize: 9,
-          margin: [2, 2],
+          bold: true,
+          fontSize: 10
         },
         tableCell: {
-          margin: [2, 2],
-          fontSize: 8.5,
-        },
-      },
-
-      defaultStyle: {
-        font: "Helvetica",
-      },
+          fontSize: 9,
+          margin: 3
+        }
+      }
     };
 
+    /* ------------------ GENERATE PDF -------------------- */
     const pdfDoc = printer.createPdfKitDocument(docDefinition);
+
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", "attachment; filename=filtered-data.pdf");
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=filtered-data.pdf"
+    );
 
     pdfDoc.pipe(res);
     pdfDoc.end();
@@ -189,17 +234,15 @@ app.get("/api/export/pdf", (req, res) => {
   }
 });
 
-/* -----------------------------------------
+/* ==========================================================
    ROOT ROUTE
------------------------------------------ */
+========================================================== */
 app.get("/", (req, res) => {
-  res.send("🚀 Backend is running!");
+  res.send("🚀 Backend is running successfully!");
 });
 
-/* -----------------------------------------
+/* ==========================================================
    START SERVER
------------------------------------------ */
+========================================================== */
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () =>
-  console.log(`🔥 Server running on port ${PORT}`)
-);
+app.listen(PORT, () => console.log(`🔥 Server running on port ${PORT}`));
