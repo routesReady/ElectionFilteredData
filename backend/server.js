@@ -80,8 +80,8 @@ app.get("/api/data", (req, res) => {
 });
 
 /* ------------------------------------------------------------------
-   STREAM-OPTIMIZED PDF EXPORT (NO 502 ERROR)
-   Supports 8,844+ rows without crashing Render
+   STREAM-OPTIMIZED PDF EXPORT (NO 502 ERROR ON RENDER)
+   Can handle 8,844+ rows smoothly
 ------------------------------------------------------------------ */
 app.get("/api/export/pdf", (req, res) => {
   try {
@@ -108,35 +108,31 @@ app.get("/api/export/pdf", (req, res) => {
     doc.pipe(res);
 
     // Title
-    doc.fontSize(15).font("Roboto-Bold").text("Filtered Data List", { align: "center" });
+    doc.font("Roboto").fontSize(15).text("Filtered Data List", { align: "center" });
     doc.moveDown(1);
 
-    // Columns & widths
     const columns = [
       "SR_No", "PF_NO", "NAME", "FATHER_NAME",
       "BILL_UNIT", "DESIG", "MOBILE_NO",
       "STATION", "BOOTH"
     ];
+
     const colWidths = [35, 70, 120, 120, 60, 80, 90, 70, 70];
 
-    // Draw header row
+    // Draw header
     let headerY = doc.y;
     columns.forEach((col, i) => {
       const x = 20 + colWidths.slice(0, i).reduce((a, b) => a + b, 0);
-      doc
-        .rect(x, headerY, colWidths[i], 18)
-        .fill("#1e293b");
-      doc
-        .fillColor("white")
-        .font("Roboto-Bold")
-        .fontSize(9)
-        .text(col, x + 3, headerY + 4, { width: colWidths[i] });
+
+      doc.rect(x, headerY, colWidths[i], 18).fill("#1e293b");
+      doc.fillColor("white").font("Roboto").fontSize(9)
+        .text(col, x + 3, headerY + 4);
     });
 
     doc.moveDown(2);
     let y = doc.y;
 
-    /* STREAM ROWS ONE-BY-ONE (Memory Efficient) */
+    // STREAM ROWS ONE BY ONE
     filtered.forEach((row, idx) => {
       const rowData = [
         idx + 1,
@@ -158,29 +154,27 @@ app.get("/api/export/pdf", (req, res) => {
           .fillOpacity(1);
       }
 
-      // Write row data
+      // Print row cells
       rowData.forEach((cell, i) => {
         const x = 20 + colWidths.slice(0, i).reduce((a, b) => a + b, 0);
-        doc
-          .font("Roboto-Regular")
-          .fontSize(8.5)
-          .fillColor("#000")
+        doc.font("Roboto").fontSize(8.5).fillColor("#000")
           .text(String(cell || ""), x + 3, y, { width: colWidths[i] });
       });
 
       y += 16;
 
-      // Page break logic
+      // Auto Page Break
       if (y > 530) {
         doc.addPage({ pageOrientation: "landscape", margin: 40 });
         y = 60;
 
-        // redraw header
+        // Redraw header on new page
         const newHeaderY = y - 20;
         columns.forEach((col, i) => {
           const x = 20 + colWidths.slice(0, i).reduce((a, b) => a + b, 0);
           doc.rect(x, newHeaderY, colWidths[i], 18).fill("#1e293b");
-          doc.fillColor("white").font("Roboto-Bold").fontSize(9).text(col, x + 3, newHeaderY + 4);
+          doc.fillColor("white").font("Roboto").fontSize(9)
+            .text(col, x + 3, newHeaderY + 4);
         });
 
         y += 20;
